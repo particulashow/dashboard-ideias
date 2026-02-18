@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Radar Dashboard (Multi-upload)</title>
+  <title>Radar Dashboard (3 uploads)</title>
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 0; background:#0b0f19; color:#e8eefc; }
     header { padding: 18px 16px; border-bottom: 1px solid rgba(255,255,255,.08); display:flex; gap:12px; align-items:center; flex-wrap:wrap;}
@@ -27,18 +27,17 @@
     }
     .btn:disabled { opacity:.5; cursor:not-allowed; }
     .col-3 { grid-column: span 3; }
-    .col-4 { grid-column: span 4; }
     .col-5 { grid-column: span 5; }
     .col-6 { grid-column: span 6; }
     .col-7 { grid-column: span 7; }
-    .col-8 { grid-column: span 8; }
-    .col-12 { grid-column: span 12; }
     canvas { width:100%; height: 220px; }
     @media (max-width: 900px){
-      .col-3,.col-4,.col-5,.col-6,.col-7,.col-8 { grid-column: span 12; }
+      .col-3,.col-5,.col-6,.col-7 { grid-column: span 12; }
       header { align-items:flex-start; }
       label { width: 100%; }
     }
+    .hint { font-size: 12px; color:#a9b7d6; margin-left: 2px; }
+    .danger { color:#ff9ea8; }
   </style>
 </head>
 <body>
@@ -47,6 +46,7 @@
       <h1>Radar Dashboard</h1>
       <span class="pill">3 ficheiros → 1 visão</span>
       <span class="pill" id="status">à espera de ficheiros</span>
+      <span class="hint" id="xlsxHint"></span>
     </div>
 
     <div class="row" style="width:100%;">
@@ -135,16 +135,28 @@
     </div>
   </div>
 
-  <!-- SheetJS (ler Excel) -->
+  <!--
+    XLSX (Excel) via CDN:
+    - Se abrires o HTML offline e carregares .xlsx/.xls, pode falhar.
+    - Para ficar à prova de bala: usa CSV OU descarrega este ficheiro e mete ao lado do HTML:
+      https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js
+      e troca a linha abaixo por: <script src="./xlsx.full.min.js"></script>
+  -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
 
   <script>
+    // ----------------------------
+    // Elementos UI
+    // ----------------------------
     const fileYT = document.getElementById('fileYT');
     const fileTT = document.getElementById('fileTT');
     const fileIG = document.getElementById('fileIG');
+
     const btnLoad = document.getElementById('btnLoad');
     const btnClear = document.getElementById('btnClear');
+
     const statusEl = document.getElementById('status');
+    const xlsxHintEl = document.getElementById('xlsxHint');
 
     const platformFilter = document.getElementById('platformFilter');
     const keywordFilter = document.getElementById('keywordFilter');
@@ -152,11 +164,16 @@
 
     let rawRows = [];
 
+    // ----------------------------
+    // Helpers
+    // ----------------------------
     function norm(s){ return (s ?? '').toString().trim(); }
+
     function toNum(v){
       const n = Number((v ?? '').toString().replace(/[^\d.-]/g,''));
       return Number.isFinite(n) ? n : 0;
     }
+
     function escapeHtml(str){
       return (str ?? '').toString()
         .replaceAll('&','&amp;')
@@ -165,6 +182,7 @@
         .replaceAll('"','&quot;')
         .replaceAll("'","&#039;");
     }
+
     function splitCsvLine(line){
       const res = [];
       let cur = '';
@@ -183,6 +201,7 @@
       res.push(cur);
       return res;
     }
+
     function csvToRows(csvText){
       const lines = csvText.split(/\r?\n/).filter(l=>l.trim().length>0);
       if(lines.length === 0) return [];
@@ -196,11 +215,13 @@
       }
       return out;
     }
+
     function dayKey(v){
       const s = norm(v);
       if(!s) return '';
       const d = new Date(s);
       if(!isNaN(d.getTime())) return d.toISOString().slice(0,10);
+
       const m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/);
       if(m){
         const dd = m[1].padStart(2,'0');
@@ -210,6 +231,7 @@
       }
       return '';
     }
+
     function countBy(arr, keyFn){
       const map = new Map();
       for(const item of arr){
@@ -219,8 +241,9 @@
       }
       return [...map.entries()].sort((a,b)=>b[1]-a[1]);
     }
+
     function setSelectOptions(selectEl, values){
-      const first = selectEl.options[0];
+      const first = selectEl.options[0]; // "Todas" / "Todos"
       selectEl.innerHTML = '';
       selectEl.appendChild(first);
       for (const v of values){
@@ -230,6 +253,7 @@
         selectEl.appendChild(opt);
       }
     }
+
     function renderList(container, pairs, max=10){
       container.innerHTML = '';
       const ul = document.createElement('div');
@@ -245,6 +269,7 @@
       });
       container.appendChild(ul);
     }
+
     function drawChart(canvas, labels, values){
       const ctx = canvas.getContext('2d');
       const w = canvas.width = canvas.clientWidth * devicePixelRatio;
@@ -278,24 +303,75 @@
       }
     }
 
-    // Mapeia diferentes nomes de colunas para o nosso schema
+    // ----------------------------
+    // Normalização (mapeamento robusto)
+    // ----------------------------
     function normalizeRow(r, sourceLabel){
+      const source = sourceLabel; // YT / TT / IG
+
+      // escolhe o primeiro campo existente e não vazio
+      const pick = (...keys) => {
+        for (const k of keys){
+          // suporta paths simples tipo "aboutChannelInfo/channelName" se vier achatado
+          if (r[k] !== undefined && r[k] !== null && String(r[k]).trim() !== '') return r[k];
+        }
+        return '';
+      };
+
       return {
-        source:     sourceLabel, // YT/TT/IG
-        platform:   r.platform ?? r.Platform ?? r.PLATFORM ?? sourceLabel,
-        author:     r.author ?? r.Author ?? r.AUTHOR ?? r.username ?? r.user ?? r.channel ?? '',
-        title:      r.title ?? r.Title ?? r.TITLE ?? r.caption ?? r.text ?? r.description ?? '',
-        url:        r.url ?? r.URL ?? r.link ?? r.Link ?? r.videoUrl ?? r.postUrl ?? '',
-        publishedAt:r.publishedAt ?? r.published_at ?? r.PublishedAt ?? r.createTime ?? r.timestamp ?? '',
-        views:      r.views ?? r.Views ?? r.viewCount ?? r.plays ?? '',
-        likes:      r.likes ?? r.Likes ?? r.likeCount ?? r.hearts ?? '',
-        comments:   r.comments ?? r.Comments ?? r.commentCount ?? '',
-        text:       r.text ?? r.Text ?? r.caption ?? r.description ?? '',
-        keyword:    r.keyword ?? r.Keyword ?? r.query ?? r.search ?? '',
-        collectedAt:r.collectedAt ?? r.collected_at ?? r.CollectedAt ?? new Date().toISOString()
+        source,
+
+        platform: pick('platform','Platform','PLATFORM') || source,
+
+        author: pick(
+          'author','Author','AUTHOR',
+          'channelName','channel','Channel','creator','Creator',
+          'username','user','handle','account','profileName'
+        ),
+
+        title: pick(
+          'title','Title','TÍTULO','videoTitle','name','Name',
+          'caption','Caption','description','Description','text','Text'
+        ),
+
+        url: pick(
+          'url','URL','link','Link','videoUrl','videoURL','postUrl','postURL','permalink','webVideoUrl'
+        ),
+
+        publishedAt: pick(
+          'publishedAt','published_at','PublishedAt',
+          'date','Date','createTime','createdAt','timestamp','time'
+        ),
+
+        views: pick(
+          'views','Views','viewCount','ViewCount','plays','playCount','Plays'
+        ),
+
+        likes: pick(
+          'likes','Likes','likeCount','LikeCount','hearts','heartCount'
+        ),
+
+        comments: pick(
+          'comments','Comments','commentsCount','CommentsCount','commentCount','CommentCount'
+        ),
+
+        text: pick(
+          'text','Text','caption','Caption','description','Description','translatedText'
+        ),
+
+        keyword: pick(
+          'keyword','Keyword','query','Query','search','searchQuery','SearchQuery'
+        ) || '',
+
+        collectedAt: pick(
+          'collectedAt','collected_at','CollectedAt','scrapedAt','ScrapedAt'
+        ) || new Date().toISOString()
       };
     }
 
+    // ----------------------------
+    // Parsing de ficheiros (CSV / XLSX)
+    // ----------------------------
     function parseFile(file, sourceLabel){
       return new Promise((resolve, reject)=>{
         const ext = file.name.toLowerCase().split('.').pop();
@@ -304,17 +380,25 @@
         reader.onload = (e) => {
           try{
             let rows = [];
+
             if(ext === 'csv'){
               rows = csvToRows(e.target.result);
             } else {
+              // XLSX / XLS
+              if(typeof XLSX === 'undefined'){
+                throw new Error('XLSX não carregou (provável modo offline). Usa CSV ou faz download do xlsx.full.min.js para a pasta do HTML.');
+              }
               const data = new Uint8Array(e.target.result);
               const wb = XLSX.read(data, {type:'array'});
               const sheetName = wb.SheetNames[0];
               const ws = wb.Sheets[sheetName];
               rows = XLSX.utils.sheet_to_json(ws, {defval: ''});
             }
+
             resolve(rows.map(r => normalizeRow(r, sourceLabel)));
-          } catch(err){ reject(err); }
+          } catch(err){
+            reject(err);
+          }
         };
 
         reader.onerror = reject;
@@ -324,6 +408,9 @@
       });
     }
 
+    // ----------------------------
+    // Filtros + render
+    // ----------------------------
     function applyFilters(){
       const p = platformFilter.value;
       const k = keywordFilter.value;
@@ -335,6 +422,16 @@
         const okS = !s || norm(r.source) === s;
         return okP && okK && okS;
       });
+    }
+
+    function refreshFilters(){
+      const allPlatforms = [...new Set(rawRows.map(r=>norm(r.platform)).filter(Boolean))].sort();
+      const allKeywords  = [...new Set(rawRows.map(r=>norm(r.keyword)).filter(Boolean))].sort();
+      const allSources   = [...new Set(rawRows.map(r=>norm(r.source)).filter(Boolean))].sort();
+
+      setSelectOptions(platformFilter, allPlatforms);
+      setSelectOptions(keywordFilter, allKeywords);
+      setSelectOptions(sourceFilter, allSources);
     }
 
     function update(){
@@ -378,15 +475,9 @@
       drawChart(document.getElementById('chart'), byDay.map(x=>x[0]), byDay.map(x=>x[1]));
     }
 
-    function refreshFilters(){
-      const allPlatforms = [...new Set(rawRows.map(r=>norm(r.platform)).filter(Boolean))].sort();
-      const allKeywords  = [...new Set(rawRows.map(r=>norm(r.keyword)).filter(Boolean))].sort();
-      const allSources   = [...new Set(rawRows.map(r=>norm(r.source)).filter(Boolean))].sort();
-      setSelectOptions(platformFilter, allPlatforms);
-      setSelectOptions(keywordFilter, allKeywords);
-      setSelectOptions(sourceFilter, allSources);
-    }
-
+    // ----------------------------
+    // Eventos UI
+    // ----------------------------
     btnLoad.addEventListener('click', async ()=>{
       const files = [
         { file: fileYT.files?.[0], label: 'YT' },
@@ -396,6 +487,16 @@
 
       if(files.length === 0){
         alert('Carrega pelo menos 1 ficheiro (YT/TT/IG).');
+        return;
+      }
+
+      // Se houver algum XLS/XLSX e o XLSX não estiver disponível, avisa cedo
+      const hasExcel = files.some(x => {
+        const ext = x.file.name.toLowerCase().split('.').pop();
+        return ext === 'xlsx' || ext === 'xls';
+      });
+      if(hasExcel && typeof XLSX === 'undefined'){
+        alert('Estás a carregar Excel (.xlsx/.xls), mas o leitor XLSX não carregou (provável modo offline). Usa CSV ou coloca xlsx.full.min.js ao lado do HTML.');
         return;
       }
 
@@ -411,8 +512,8 @@
         statusEl.textContent = `ok (${rawRows.length.toLocaleString('pt-PT')} linhas)`;
       } catch(err){
         console.error(err);
-        alert('Erro a ler ficheiros. Se quiseres, envia-me um exemplo de cada export e eu ajusto o mapeamento das colunas.');
         statusEl.textContent = 'erro';
+        alert('Erro a ler ficheiros. Sugestão: exporta em CSV nos 3 e tenta outra vez.\n\nDetalhe: ' + (err?.message || err));
       } finally {
         btnLoad.disabled = false;
       }
@@ -423,9 +524,11 @@
       fileYT.value = '';
       fileTT.value = '';
       fileIG.value = '';
+
       platformFilter.value = '';
       keywordFilter.value = '';
       sourceFilter.value = '';
+
       refreshFilters();
       update();
       statusEl.textContent = 'limpo';
@@ -435,9 +538,16 @@
     keywordFilter.addEventListener('change', update);
     sourceFilter.addEventListener('change', update);
 
-    // init
-    refreshFilters();
-    update();
+    // Hint para XLSX offline
+    (function init(){
+      if(typeof XLSX === 'undefined'){
+        xlsxHintEl.innerHTML = '<span class="danger">Dica:</span> se abrires offline, usa CSV (ou mete xlsx.full.min.js ao lado do HTML).';
+      } else {
+        xlsxHintEl.textContent = '';
+      }
+      refreshFilters();
+      update();
+    })();
   </script>
 </body>
 </html>
