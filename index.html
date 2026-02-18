@@ -9,7 +9,7 @@
     header { padding: 18px 16px; border-bottom: 1px solid rgba(255,255,255,.08); display:flex; gap:12px; align-items:center; flex-wrap:wrap;}
     h1 { font-size: 16px; margin: 0; letter-spacing:.2px; }
     .pill { padding: 6px 10px; border:1px solid rgba(255,255,255,.12); border-radius: 999px; font-size: 12px; color:#bcd0ff;}
-    .pill.warn { border-color: rgba(255,158,168,.4); color:#ff9ea8; }
+    .pill.warn { border-color: rgba(255,158,168,.45); color:#ff9ea8; }
     .wrap { padding: 16px; max-width: 1200px; margin: 0 auto; }
     .grid { display:grid; gap:12px; grid-template-columns: repeat(12, 1fr); }
     .card { background: rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius: 14px; padding: 12px; }
@@ -38,7 +38,6 @@
     }
     .hint { font-size: 12px; color:#a9b7d6; margin-left: 2px; }
     .danger { color:#ff9ea8; }
-    .ok { color:#9dffb5; }
   </style>
 </head>
 <body>
@@ -119,7 +118,7 @@
       </div>
 
       <div class="card col-6">
-        <div class="muted" style="margin-bottom:8px;">Top 10 posts (por comments)</div>
+        <div class="muted" style="margin-bottom:8px;">Top 25 posts (por comments)</div>
         <table>
           <thead>
             <tr>
@@ -138,17 +137,13 @@
     </div>
   </div>
 
-  <!-- Excel via CDN (se abrires offline e usares XLSX pode falhar; CSV é o mais seguro) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
 
   <script>
-    // ----------------------------
     // UI
-    // ----------------------------
     const fileYT = document.getElementById('fileYT');
     const fileTT = document.getElementById('fileTT');
     const fileIG = document.getElementById('fileIG');
-
     const btnLoad = document.getElementById('btnLoad');
     const btnClear = document.getElementById('btnClear');
 
@@ -163,10 +158,12 @@
 
     let rawRows = [];
 
-    // ----------------------------
     // Helpers
-    // ----------------------------
     function norm(s){ return (s ?? '').toString().trim(); }
+    function toNum(v){
+      const n = Number((v ?? '').toString().replace(/[^\d.-]/g,''));
+      return Number.isFinite(n) ? n : 0;
+    }
     function escapeHtml(str){
       return (str ?? '').toString()
         .replaceAll('&','&amp;')
@@ -175,13 +172,13 @@
         .replaceAll('"','&quot;')
         .replaceAll("'","&#039;");
     }
-    function toNum(v){
-      const n = Number((v ?? '').toString().replace(/[^\d.-]/g,''));
-      return Number.isFinite(n) ? n : 0;
-    }
+
+    // Normaliza nomes de colunas (ex: "authorMeta/name" -> "authormetaname")
     function keyNorm(k){
       return (k ?? '').toString().toLowerCase().replace(/[^a-z0-9]/g,'');
     }
+
+    // Index row por chaves normalizadas
     function indexRow(r){
       const idx = {};
       for (const k in r){
@@ -194,6 +191,8 @@
       }
       return idx;
     }
+
+    // Pick por índice
     function pickIdx(idx, ...keys){
       for (const k of keys){
         const nk = keyNorm(k);
@@ -206,29 +205,25 @@
     function normalizeUrl(u, source){
       let s = norm(u);
       if(!s) return '';
-
-      s = s.replace(/^"+|"+$/g,'');      // remove aspas
+      s = s.replace(/^"+|"+$/g,'');
       if (s.startsWith('//')) s = 'https:' + s;
 
-      // paths relativos
       if (s.startsWith('/')){
         if(source === 'TT') s = 'https://www.tiktok.com' + s;
         if(source === 'IG') s = 'https://www.instagram.com' + s;
         if(source === 'YT') s = 'https://www.youtube.com' + s;
       }
 
-      // sem esquema
       if (!/^https?:\/\//i.test(s)){
         if (s.startsWith('www.')) s = 'https://' + s;
         else if (s.startsWith('tiktok.com')) s = 'https://www.' + s;
         else if (s.startsWith('instagram.com')) s = 'https://www.' + s;
         else if (s.startsWith('youtube.com') || s.startsWith('youtu.be')) s = 'https://' + s;
       }
-
       return s;
     }
 
-    // TikTok fallback: construir link se faltar webVideoUrl
+    // TikTok fallback URL
     function buildTikTokUrlIfMissing(idx, currentUrl){
       if(currentUrl) return currentUrl;
       const id = pickIdx(idx, 'id','videoid','awemeid');
@@ -238,6 +233,7 @@
       return `https://www.tiktok.com/@${norm(user).replace(/^@/,'')}/video/${norm(id)}`;
     }
 
+    // CSV parser
     function splitCsvLine(line){
       const res = [];
       let cur = '';
@@ -256,6 +252,7 @@
       res.push(cur);
       return res;
     }
+
     function csvToRows(csvText){
       const lines = csvText.split(/\r?\n/).filter(l=>l.trim().length>0);
       if(lines.length === 0) return [];
@@ -275,7 +272,6 @@
       if(!s) return '';
       const d = new Date(s);
       if(!isNaN(d.getTime())) return d.toISOString().slice(0,10);
-
       const m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/);
       if(m){
         const dd = m[1].padStart(2,'0');
@@ -364,17 +360,18 @@
       return source;
     }
 
-    // ----------------------------
-    // Normalização por source (robusta)
-    // ----------------------------
+    // Normalização por source (com campos reais: TT diggCount, IG ownerUsername, etc.)
     function normalizeRow(r, source){
       const idx = indexRow(r);
 
       const author = pickIdx(idx,
-        // comuns
-        'author','username','user','handle','account','creator','profilename',
-        // youtube
-        'channelname','channeltitle','uploader','uploadername'
+        // TikTok
+        'authormetaname','authormetanickname',
+        // Instagram
+        'ownerusername','username','ownerfullname',
+        // YouTube + comuns
+        'channelname','channeltitle','uploader','uploadername',
+        'author','user','handle','account','creator','profilename'
       );
 
       const title = pickIdx(idx,
@@ -382,34 +379,52 @@
         'caption','description','text','content','posttext'
       );
 
-      // URL (muito importante!)
       let urlRaw = pickIdx(idx,
         // comuns
         'url','link','permalink','shareurl',
-        // tiktok
+        // TikTok / IG
         'webvideourl','videourl','posturl',
-        // youtube-scraper variantes
-        'watchurl','canonicalurl','shorturl','videolink','videocanonicalurl','videopageurl'
+        // YouTube variantes
+        'watchurl','canonicalurl','shorturl','videolink','videopageurl'
       );
 
       let url = normalizeUrl(urlRaw, source);
-
       if(source === 'TT'){
         url = buildTikTokUrlIfMissing(idx, url);
       }
 
-      // métricas
-      const views = pickIdx(idx, 'views','viewcount','playcount','plays');
-      const likes = pickIdx(idx, 'likes','likecount','heartcount','hearts');
-      const comments = pickIdx(idx, 'comments','commentcount','commentscount');
+      const views = pickIdx(idx,
+        // IG às vezes
+        'videoviewcount','videoplaycount',
+        // TT
+        'playcount',
+        // genérico
+        'views','viewcount','plays','impressions'
+      );
 
-      // datas
+      const likes = pickIdx(idx,
+        // IG
+        'likescount',
+        // TT (likes = diggs)
+        'diggcount',
+        // genérico
+        'likes','likecount','heartcount','hearts'
+      );
+
+      const comments = pickIdx(idx,
+        // IG
+        'commentscount',
+        // TT
+        'commentcount',
+        // genérico
+        'comments','comment'
+      );
+
       const publishedAt = pickIdx(idx, 'publishedat','date','createdat','createtime','timestamp','time');
-
-      // keyword/query
       const keyword = pickIdx(idx, 'keyword','query','search','searchquery') || '';
-
       const collectedAt = pickIdx(idx, 'collectedat','scrapedat','pulledat') || new Date().toISOString();
+
+      const hasError = !!pickIdx(idx, 'error','errormessage','status') && String(pickIdx(idx,'error','status')).toLowerCase().includes('not');
 
       return {
         source,
@@ -424,27 +439,22 @@
         text: norm(pickIdx(idx, 'text','caption','description','content','posttext')),
         keyword: norm(keyword),
         collectedAt,
-
-        // debug (não mostrado): para detectar ficheiro de canal-only do YouTube
-        _hasAboutChannelInfo: !!pickIdx(idx, 'aboutchannelinfochannelname','aboutchannelinfochannelurl','channeltotalvideos')
+        _hasAboutChannelInfo: !!pickIdx(idx, 'aboutchannelinfochannelname','aboutchannelinfochannelurl','channeltotalvideos'),
+        _hasError: hasError
       };
     }
 
     function isYouTubeChannelOnly(rows){
-      // se a maioria tem aboutChannelInfo e não tem url de vídeo, é channel-only
       if(rows.length === 0) return false;
-      let about = 0, videoUrl = 0, hasTitle = 0;
+      let about = 0, videoUrl = 0;
       for(const r of rows){
         if(r._hasAboutChannelInfo) about++;
         if(r.url && (r.url.includes('watch?v=') || r.url.includes('youtu.be/'))) videoUrl++;
-        if(r.title) hasTitle++;
       }
       return about > rows.length * 0.6 && videoUrl === 0;
     }
 
-    // ----------------------------
-    // Parse ficheiros
-    // ----------------------------
+    // Parse file
     function parseFile(file, source){
       return new Promise((resolve, reject)=>{
         const ext = file.name.toLowerCase().split('.').pop();
@@ -457,7 +467,7 @@
               rows = csvToRows(e.target.result);
             } else {
               if(typeof XLSX === 'undefined'){
-                throw new Error('XLSX não carregou (provável modo offline). Usa CSV para os 3.');
+                throw new Error('XLSX não carregou. Usa CSV nos 3 para estabilidade.');
               }
               const data = new Uint8Array(e.target.result);
               const wb = XLSX.read(data, {type:'array'});
@@ -468,8 +478,10 @@
 
             const out = rows
               .map(r => normalizeRow(r, source))
-              // mantém só linhas que tenham pelo menos algo útil
-              .filter(x => x.url || x.title || x.author);
+              // remove linhas vazias
+              .filter(x => x.url || x.title || x.author)
+              // remove linhas com erro (ex: IG not_found) para não estragar métricas
+              .filter(x => !x._hasError);
 
             resolve(out);
           } catch(err){
@@ -484,9 +496,7 @@
       });
     }
 
-    // ----------------------------
-    // Filtros + Render
-    // ----------------------------
+    // Filtros
     function applyFilters(){
       const p = platformFilter.value;
       const k = keywordFilter.value;
@@ -513,18 +523,15 @@
     function updateCountsAndWarnings(){
       const counts = { YT: 0, TT: 0, IG: 0 };
       const ytRows = [];
-
       for(const r of rawRows){
         if(counts[r.source] !== undefined) counts[r.source]++;
         if(r.source === 'YT') ytRows.push(r);
       }
-
       countsEl.textContent = `YouTube: ${counts.YT.toLocaleString('pt-PT')} · TikTok: ${counts.TT.toLocaleString('pt-PT')} · Instagram: ${counts.IG.toLocaleString('pt-PT')}`;
 
-      // aviso para o caso mais comum: YouTube export de "channel info"
       if(isYouTubeChannelOnly(ytRows)){
         ytWarningEl.style.display = '';
-        ytWarningEl.textContent = 'O CSV do YouTube parece ser “channel info” (aboutChannelInfo), não lista de vídeos. Usa startUrls com /videos no actor streamers/youtube-scraper.';
+        ytWarningEl.textContent = 'O CSV do YouTube parece ser “channel info” (aboutChannelInfo), não lista de vídeos. No actor streamers/youtube-scraper usa startUrls a terminar em /videos.';
       } else {
         ytWarningEl.style.display = 'none';
         ytWarningEl.textContent = '';
@@ -549,19 +556,21 @@
 
       const topPosts = [...rows]
         .sort((a,b)=> (toNum(b.comments)-toNum(a.comments)) || (toNum(b.views)-toNum(a.views)))
-        .slice(0,10);
+        .slice(0,25);
 
       const tbody = document.getElementById('topPosts');
       tbody.innerHTML = '';
       for(const r of topPosts){
         const safeUrl = r.url || '';
         const title = norm(r.title) || '(sem título)';
+        const author = norm(r.author) || '(sem autor)';
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${escapeHtml(norm(r.source))}</td>
           <td>${escapeHtml(norm(r.platform))}</td>
           <td>${safeUrl ? `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noreferrer">${escapeHtml(title.slice(0,90))}</a>` : escapeHtml(title.slice(0,90))}</td>
-          <td>${escapeHtml(norm(r.author) || '(sem autor)')}</td>
+          <td>${escapeHtml(author)}</td>
           <td>${toNum(r.views).toLocaleString('pt-PT')}</td>
           <td>${toNum(r.likes).toLocaleString('pt-PT')}</td>
           <td>${toNum(r.comments).toLocaleString('pt-PT')}</td>
@@ -574,9 +583,7 @@
       drawChart(document.getElementById('chart'), byDay.map(x=>x[0]), byDay.map(x=>x[1]));
     }
 
-    // ----------------------------
     // Eventos
-    // ----------------------------
     btnLoad.addEventListener('click', async ()=>{
       const files = [
         { file: fileYT.files?.[0], source: 'YT' },
@@ -594,7 +601,7 @@
         return ext === 'xlsx' || ext === 'xls';
       });
       if(hasExcel && typeof XLSX === 'undefined'){
-        alert('Estás a carregar Excel (.xlsx/.xls), mas o leitor XLSX não carregou. Usa CSV para os 3 para ficar sempre estável.');
+        alert('Estás a carregar Excel (.xlsx/.xls), mas o leitor XLSX não carregou. Usa CSV nos 3 para estabilidade.');
         return;
       }
 
@@ -635,7 +642,6 @@
 
       ytWarningEl.style.display = 'none';
       ytWarningEl.textContent = '';
-
       statusEl.textContent = 'limpo';
     });
 
