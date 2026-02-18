@@ -27,12 +27,14 @@
     }
     .btn:disabled { opacity:.5; cursor:not-allowed; }
     .col-3 { grid-column: span 3; }
+    .col-4 { grid-column: span 4; }
     .col-5 { grid-column: span 5; }
     .col-6 { grid-column: span 6; }
     .col-7 { grid-column: span 7; }
+    .col-12 { grid-column: span 12; }
     canvas { width:100%; height: 220px; }
     @media (max-width: 900px){
-      .col-3,.col-5,.col-6,.col-7 { grid-column: span 12; }
+      .col-3,.col-4,.col-5,.col-6,.col-7 { grid-column: span 12; }
       header { align-items:flex-start; }
       label { width: 100%; }
     }
@@ -42,10 +44,11 @@
 </head>
 <body>
   <header>
-    <div style="display:flex;align-items:center;gap:10px;">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <h1>Radar Dashboard</h1>
       <span class="pill">3 ficheiros → 1 visão</span>
       <span class="pill" id="status">à espera de ficheiros</span>
+      <span class="pill" id="sourceCounts" title="Linhas por source">YT: 0 · TT: 0 · IG: 0</span>
       <span class="hint" id="xlsxHint"></span>
     </div>
 
@@ -135,27 +138,20 @@
     </div>
   </div>
 
-  <!--
-    XLSX (Excel) via CDN:
-    - Se abrires o HTML offline e carregares .xlsx/.xls, pode falhar.
-    - Para ficar à prova de bala: usa CSV OU descarrega este ficheiro e mete ao lado do HTML:
-      https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js
-      e troca a linha abaixo por: <script src="./xlsx.full.min.js"></script>
-  -->
+  <!-- XLSX (Excel) via CDN -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
 
   <script>
     // ----------------------------
-    // Elementos UI
+    // UI
     // ----------------------------
     const fileYT = document.getElementById('fileYT');
     const fileTT = document.getElementById('fileTT');
     const fileIG = document.getElementById('fileIG');
-
     const btnLoad = document.getElementById('btnLoad');
     const btnClear = document.getElementById('btnClear');
-
     const statusEl = document.getElementById('status');
+    const sourceCountsEl = document.getElementById('sourceCounts');
     const xlsxHintEl = document.getElementById('xlsxHint');
 
     const platformFilter = document.getElementById('platformFilter');
@@ -181,6 +177,65 @@
         .replaceAll('>','&gt;')
         .replaceAll('"','&quot;')
         .replaceAll("'","&#039;");
+    }
+
+    // Normaliza nomes de colunas: "comment_count" -> "commentcount", "video URL" -> "videourl"
+    function keyNorm(k){
+      return (k ?? '').toString().toLowerCase().replace(/[^a-z0-9]/g,'');
+    }
+
+    // Cria um índice (map) com as chaves normalizadas
+    function indexRow(r){
+      const idx = {};
+      for (const k in r){
+        const nk = keyNorm(k);
+        if (!nk) continue;
+        const v = r[k];
+        // guarda o primeiro valor não vazio para essa chave
+        if (idx[nk] === undefined || idx[nk] === null || String(idx[nk]).trim() === ''){
+          idx[nk] = v;
+        }
+      }
+      return idx;
+    }
+
+    // Escolhe a primeira chave que exista (já normalizada)
+    function pickIdx(idx, ...keys){
+      for (const k of keys){
+        const nk = keyNorm(k);
+        const v = idx[nk];
+        if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+      }
+      return '';
+    }
+
+    function normalizeUrl(u, source){
+      let s = norm(u);
+      if (!s) return '';
+
+      // alguns exports vêm com aspas
+      s = s.replace(/^"+|"+$/g,'');
+
+      // URLs tipo //tiktok.com/...
+      if (s.startsWith('//')) s = 'https:' + s;
+
+      // paths do TikTok tipo /@user/video/123...
+      if (s.startsWith('/') && (source === 'TT' || source === 'IG' || source === 'YT')){
+        if (source === 'TT') s = 'https://www.tiktok.com' + s;
+        else if (source === 'IG') s = 'https://www.instagram.com' + s;
+        else if (source === 'YT') s = 'https://www.youtube.com' + s;
+      }
+
+      // sem esquema
+      if (!/^https?:\/\//i.test(s)){
+        // alguns exports podem vir com www.tiktok.com/...
+        if (s.startsWith('www.')) s = 'https://' + s;
+        else if (s.startsWith('tiktok.com')) s = 'https://www.' + s;
+        else if (s.startsWith('instagram.com')) s = 'https://www.' + s;
+        else if (s.startsWith('youtube.com') || s.startsWith('youtu.be')) s = 'https://' + s;
+      }
+
+      return s;
     }
 
     function splitCsvLine(line){
@@ -243,7 +298,7 @@
     }
 
     function setSelectOptions(selectEl, values){
-      const first = selectEl.options[0]; // "Todas" / "Todos"
+      const first = selectEl.options[0];
       selectEl.innerHTML = '';
       selectEl.appendChild(first);
       for (const v of values){
@@ -304,75 +359,59 @@
     }
 
     // ----------------------------
-    // Normalização (mapeamento robusto)
+    // Normalização (robusta)
     // ----------------------------
-    function normalizeRow(r, sourceLabel){
-      const source = sourceLabel; // YT / TT / IG
+    function normalizeRow(r, source){
+      const idx = indexRow(r);
 
-      // escolhe o primeiro campo existente e não vazio
-      const pick = (...keys) => {
-        for (const k of keys){
-          // suporta paths simples tipo "aboutChannelInfo/channelName" se vier achatado
-          if (r[k] !== undefined && r[k] !== null && String(r[k]).trim() !== '') return r[k];
-        }
-        return '';
-      };
+      // Autor
+      const author = pickIdx(idx,
+        'author','username','user','handle','account','creator','profile','profilename',
+        'channelname','channeltitle','channel','channelid','uploader','uploadername'
+      );
+
+      // Título / texto
+      const title = pickIdx(idx,
+        'title','videotitle','name','caption','description','text','content','posttext'
+      );
+
+      // URL
+      const urlRaw = pickIdx(idx,
+        'url','link','videourl','posturl','permalink','webvideourl','shareurl'
+      );
+      const url = normalizeUrl(urlRaw, source);
+
+      // Datas e métricas
+      const publishedAt = pickIdx(idx, 'publishedat','date','createdat','createtime','timestamp','time');
+      const views = pickIdx(idx, 'views','viewcount','playcount','plays','impressions');
+      const likes = pickIdx(idx, 'likes','likecount','heartcount','hearts');
+      const comments = pickIdx(idx, 'comments','commentscount','commentcount');
+
+      // Keyword/query (muitas vezes vem vazio nos exports)
+      const keyword = pickIdx(idx, 'keyword','query','search','searchquery') || '';
+
+      const collectedAt = pickIdx(idx, 'collectedat','scrapedat','pulledat') || new Date().toISOString();
 
       return {
         source,
-
-        platform: pick('platform','Platform','PLATFORM') || source,
-
-        author: pick(
-          'author','Author','AUTHOR',
-          'channelName','channel','Channel','creator','Creator',
-          'username','user','handle','account','profileName'
-        ),
-
-        title: pick(
-          'title','Title','TÍTULO','videoTitle','name','Name',
-          'caption','Caption','description','Description','text','Text'
-        ),
-
-        url: pick(
-          'url','URL','link','Link','videoUrl','videoURL','postUrl','postURL','permalink','webVideoUrl'
-        ),
-
-        publishedAt: pick(
-          'publishedAt','published_at','PublishedAt',
-          'date','Date','createTime','createdAt','timestamp','time'
-        ),
-
-        views: pick(
-          'views','Views','viewCount','ViewCount','plays','playCount','Plays'
-        ),
-
-        likes: pick(
-          'likes','Likes','likeCount','LikeCount','hearts','heartCount'
-        ),
-
-        comments: pick(
-          'comments','Comments','commentsCount','CommentsCount','commentCount','CommentCount'
-        ),
-
-        text: pick(
-          'text','Text','caption','Caption','description','Description','translatedText'
-        ),
-
-        keyword: pick(
-          'keyword','Keyword','query','Query','search','searchQuery','SearchQuery'
-        ) || '',
-
-        collectedAt: pick(
-          'collectedAt','collected_at','CollectedAt','scrapedAt','ScrapedAt'
-        ) || new Date().toISOString()
+        platform: source,         // mantém simples (YT/TT/IG); podes mudar depois
+        author: norm(author),
+        title: norm(title),
+        url,
+        publishedAt,
+        views,
+        likes,
+        comments,
+        text: norm(pickIdx(idx, 'text','caption','description','content','posttext')),
+        keyword: norm(keyword),
+        collectedAt
       };
     }
 
     // ----------------------------
-    // Parsing de ficheiros (CSV / XLSX)
+    // Parse ficheiros (CSV / XLSX)
     // ----------------------------
-    function parseFile(file, sourceLabel){
+    function parseFile(file, source){
       return new Promise((resolve, reject)=>{
         const ext = file.name.toLowerCase().split('.').pop();
         const reader = new FileReader();
@@ -380,13 +419,11 @@
         reader.onload = (e) => {
           try{
             let rows = [];
-
             if(ext === 'csv'){
               rows = csvToRows(e.target.result);
             } else {
-              // XLSX / XLS
               if(typeof XLSX === 'undefined'){
-                throw new Error('XLSX não carregou (provável modo offline). Usa CSV ou faz download do xlsx.full.min.js para a pasta do HTML.');
+                throw new Error('XLSX não carregou (provável modo offline). Usa CSV ou mete xlsx.full.min.js ao lado do HTML.');
               }
               const data = new Uint8Array(e.target.result);
               const wb = XLSX.read(data, {type:'array'});
@@ -395,7 +432,11 @@
               rows = XLSX.utils.sheet_to_json(ws, {defval: ''});
             }
 
-            resolve(rows.map(r => normalizeRow(r, sourceLabel)));
+            const out = rows.map(r => normalizeRow(r, source))
+              // limpa linhas completamente vazias
+              .filter(x => x.url || x.title || x.author);
+
+            resolve(out);
           } catch(err){
             reject(err);
           }
@@ -409,7 +450,7 @@
     }
 
     // ----------------------------
-    // Filtros + render
+    // Render / filtros
     // ----------------------------
     function applyFilters(){
       const p = platformFilter.value;
@@ -432,6 +473,14 @@
       setSelectOptions(platformFilter, allPlatforms);
       setSelectOptions(keywordFilter, allKeywords);
       setSelectOptions(sourceFilter, allSources);
+    }
+
+    function updateSourceCounts(){
+      const counts = { YT: 0, TT: 0, IG: 0 };
+      for (const r of rawRows){
+        if (counts[r.source] !== undefined) counts[r.source]++;
+      }
+      sourceCountsEl.textContent = `YT: ${counts.YT.toLocaleString('pt-PT')} · TT: ${counts.TT.toLocaleString('pt-PT')} · IG: ${counts.IG.toLocaleString('pt-PT')}`;
     }
 
     function update(){
@@ -457,11 +506,12 @@
       const tbody = document.getElementById('topPosts');
       tbody.innerHTML = '';
       for(const r of topPosts){
+        const safeUrl = r.url || '';
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${escapeHtml(norm(r.source))}</td>
           <td>${escapeHtml(norm(r.platform))}</td>
-          <td><a href="${escapeHtml(norm(r.url))}" target="_blank" rel="noreferrer">${escapeHtml(norm(r.title).slice(0,90))}</a></td>
+          <td>${safeUrl ? `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noreferrer">${escapeHtml(norm(r.title).slice(0,90))}</a>` : escapeHtml(norm(r.title).slice(0,90))}</td>
           <td>${escapeHtml(norm(r.author))}</td>
           <td>${toNum(r.views).toLocaleString('pt-PT')}</td>
           <td>${toNum(r.likes).toLocaleString('pt-PT')}</td>
@@ -476,13 +526,13 @@
     }
 
     // ----------------------------
-    // Eventos UI
+    // Eventos
     // ----------------------------
     btnLoad.addEventListener('click', async ()=>{
       const files = [
-        { file: fileYT.files?.[0], label: 'YT' },
-        { file: fileTT.files?.[0], label: 'TT' },
-        { file: fileIG.files?.[0], label: 'IG' }
+        { file: fileYT.files?.[0], source: 'YT' },
+        { file: fileTT.files?.[0], source: 'TT' },
+        { file: fileIG.files?.[0], source: 'IG' }
       ].filter(x => x.file);
 
       if(files.length === 0){
@@ -490,13 +540,12 @@
         return;
       }
 
-      // Se houver algum XLS/XLSX e o XLSX não estiver disponível, avisa cedo
       const hasExcel = files.some(x => {
         const ext = x.file.name.toLowerCase().split('.').pop();
         return ext === 'xlsx' || ext === 'xls';
       });
       if(hasExcel && typeof XLSX === 'undefined'){
-        alert('Estás a carregar Excel (.xlsx/.xls), mas o leitor XLSX não carregou (provável modo offline). Usa CSV ou coloca xlsx.full.min.js ao lado do HTML.');
+        alert('Estás a carregar Excel (.xlsx/.xls), mas o leitor XLSX não carregou. Usa CSV ou faz deploy com internet para o CDN.');
         return;
       }
 
@@ -504,16 +553,18 @@
       btnLoad.disabled = true;
 
       try{
-        const parsed = await Promise.all(files.map(x => parseFile(x.file, x.label)));
+        const parsed = await Promise.all(files.map(x => parseFile(x.file, x.source)));
         rawRows = parsed.flat();
 
         refreshFilters();
+        updateSourceCounts();
         update();
+
         statusEl.textContent = `ok (${rawRows.length.toLocaleString('pt-PT')} linhas)`;
       } catch(err){
         console.error(err);
         statusEl.textContent = 'erro';
-        alert('Erro a ler ficheiros. Sugestão: exporta em CSV nos 3 e tenta outra vez.\n\nDetalhe: ' + (err?.message || err));
+        alert('Erro a ler ficheiros.\n\nDetalhe: ' + (err?.message || err));
       } finally {
         btnLoad.disabled = false;
       }
@@ -530,7 +581,9 @@
       sourceFilter.value = '';
 
       refreshFilters();
+      updateSourceCounts();
       update();
+
       statusEl.textContent = 'limpo';
     });
 
@@ -538,7 +591,6 @@
     keywordFilter.addEventListener('change', update);
     sourceFilter.addEventListener('change', update);
 
-    // Hint para XLSX offline
     (function init(){
       if(typeof XLSX === 'undefined'){
         xlsxHintEl.innerHTML = '<span class="danger">Dica:</span> se abrires offline, usa CSV (ou mete xlsx.full.min.js ao lado do HTML).';
@@ -546,6 +598,7 @@
         xlsxHintEl.textContent = '';
       }
       refreshFilters();
+      updateSourceCounts();
       update();
     })();
   </script>
