@@ -3,138 +3,220 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Radar Dashboard (YT + TT + IG)</title>
+  <title>Radar Dashboard (1 coluna + ordenar + descrição)</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 0; background:#0b0f19; color:#e8eefc; }
-    header { padding: 18px 16px; border-bottom: 1px solid rgba(255,255,255,.08); display:flex; gap:12px; align-items:center; flex-wrap:wrap;}
+    :root{
+      --bg:#0b0f19;
+      --card:rgba(255,255,255,.04);
+      --border:rgba(255,255,255,.08);
+      --muted:#a9b7d6;
+      --text:#e8eefc;
+      --link:#7fb0ff;
+      --pill:#bcd0ff;
+      --warn:#ff9ea8;
+    }
+    *{box-sizing:border-box;}
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 0; background:var(--bg); color:var(--text); }
+    header { padding: 16px; border-bottom: 1px solid var(--border); }
     h1 { font-size: 16px; margin: 0; letter-spacing:.2px; }
-    .pill { padding: 6px 10px; border:1px solid rgba(255,255,255,.12); border-radius: 999px; font-size: 12px; color:#bcd0ff;}
-    .pill.warn { border-color: rgba(255,158,168,.45); color:#ff9ea8; }
-    .wrap { padding: 16px; max-width: 1200px; margin: 0 auto; }
-    .grid { display:grid; gap:12px; grid-template-columns: repeat(12, 1fr); }
-    .card { background: rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius: 14px; padding: 12px; }
-    .kpi { font-size: 22px; font-weight: 700; }
-    .muted { color:#a9b7d6; font-size: 12px; }
-    label { font-size: 12px; color:#a9b7d6; display:flex; flex-direction:column; gap:6px;}
-    select, input[type="file"] { background: rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); color:#e8eefc; border-radius: 10px; padding: 8px; }
-    table { width:100%; border-collapse: collapse; font-size: 12px; }
-    th, td { border-bottom:1px solid rgba(255,255,255,.08); padding: 8px 6px; text-align:left; vertical-align: top;}
-    th { color:#bcd0ff; font-weight: 600; }
-    a { color:#7fb0ff; text-decoration:none; }
-    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; width:100%; }
+    .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    .wrap { padding: 16px; max-width: 1200px; margin: 0 auto; display:flex; flex-direction:column; gap:12px; }
+
+    .topbar{
+      display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;
+    }
+
+    .pills { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .pill { padding: 6px 10px; border:1px solid rgba(255,255,255,.12); border-radius: 999px; font-size: 12px; color:var(--pill); background:rgba(255,255,255,.03); }
+    .pill.warn { border-color: rgba(255,158,168,.45); color:var(--warn); }
+
+    .card { background: var(--card); border:1px solid var(--border); border-radius: 14px; padding: 12px; }
+    .muted { color:var(--muted); font-size: 12px; }
+    .kpi { font-size: 20px; font-weight: 750; line-height: 1.1; }
+
+    .inputs{
+      display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;
+      padding-top: 10px;
+    }
+    label { font-size: 12px; color:var(--muted); display:flex; flex-direction:column; gap:6px; }
+    select, input[type="file"] {
+      background: rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.12);
+      color:var(--text);
+      border-radius: 10px;
+      padding: 8px;
+      min-width: 180px;
+    }
+    input[type="file"]{ min-width: 240px; }
     .btn {
       padding: 8px 10px; border-radius: 10px; border:1px solid rgba(255,255,255,.12);
-      background: rgba(255,255,255,.06); color:#e8eefc; cursor:pointer;
+      background: rgba(255,255,255,.06); color:var(--text); cursor:pointer;
+      height: 36px;
     }
     .btn:disabled { opacity:.5; cursor:not-allowed; }
-    .col-3 { grid-column: span 3; }
-    .col-5 { grid-column: span 5; }
-    .col-6 { grid-column: span 6; }
-    .col-7 { grid-column: span 7; }
-    canvas { width:100%; height: 220px; }
-    @media (max-width: 900px){
-      .col-3,.col-5,.col-6,.col-7 { grid-column: span 12; }
-      label { width: 100%; }
+
+    .kpis{
+      display:grid; gap:10px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
     }
-    .hint { font-size: 12px; color:#a9b7d6; margin-left: 2px; }
-    .danger { color:#ff9ea8; }
+    @media (max-width: 900px){
+      .kpis{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      select, input[type="file"]{ min-width: 100%; }
+      .btn{ width: 100%; }
+      .inputs{ align-items:stretch; }
+    }
+
+    .list{
+      display:grid; gap:8px;
+      margin-top: 8px;
+    }
+    .listRow{
+      display:flex; justify-content:space-between; gap:12px;
+      padding: 8px 10px;
+      border:1px solid rgba(255,255,255,.08);
+      border-radius: 12px;
+      background: rgba(255,255,255,.03);
+    }
+    .badge{
+      padding: 2px 8px;
+      border-radius: 999px;
+      border:1px solid rgba(255,255,255,.12);
+      color:var(--pill);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    canvas { width:100%; height: 220px; }
+
+    table { width:100%; border-collapse: collapse; font-size: 12px; }
+    th, td { border-bottom:1px solid rgba(255,255,255,.08); padding: 10px 8px; text-align:left; vertical-align: top;}
+    th { color:var(--pill); font-weight: 650; position: sticky; top: 0; background: rgba(11,15,25,.95); }
+    a { color:var(--link); text-decoration:none; }
+    .small{ white-space: nowrap; }
+    .titleCell{ min-width: 320px; max-width: 520px; }
+    .descCell{ min-width: 280px; max-width: 520px; }
+    .truncate{
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .thBtn{
+      display:inline-flex; align-items:center; gap:6px;
+      cursor:pointer; user-select:none;
+    }
+    .sortIcon{ opacity:.85; font-size: 11px; }
+    .muted2{ color: rgba(169,183,214,.85); font-size: 11px; }
   </style>
 </head>
 <body>
+
   <header>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-      <h1>Radar Dashboard</h1>
-      <span class="pill">3 ficheiros → 1 visão</span>
-      <span class="pill" id="status">à espera de ficheiros</span>
-      <span class="pill" id="counts">YouTube: 0 · TikTok: 0 · Instagram: 0</span>
-      <span class="pill warn" id="ytWarning" style="display:none;"></span>
-      <span class="hint" id="xlsxHint"></span>
+    <div class="topbar">
+      <div>
+        <h1>Radar Dashboard</h1>
+        <div class="sub">Upload (YT/TT/IG) → filtros → Top 25 → ordenar por clique</div>
+      </div>
+
+      <div class="pills">
+        <span class="pill" id="status">à espera de ficheiros</span>
+        <span class="pill" id="counts">YouTube: 0 · TikTok: 0 · Instagram: 0</span>
+        <span class="pill warn" id="ytWarning" style="display:none;"></span>
+      </div>
     </div>
 
-    <div class="row">
-      <label>
-        YouTube (CSV/XLSX)
+    <div class="inputs">
+      <label>YouTube (CSV/XLSX)
         <input id="fileYT" type="file" accept=".xlsx,.xls,.csv" />
       </label>
-      <label>
-        TikTok (CSV/XLSX)
+      <label>TikTok (CSV/XLSX)
         <input id="fileTT" type="file" accept=".xlsx,.xls,.csv" />
       </label>
-      <label>
-        Instagram (CSV/XLSX)
+      <label>Instagram (CSV/XLSX)
         <input id="fileIG" type="file" accept=".xlsx,.xls,.csv" />
       </label>
 
       <button class="btn" id="btnLoad">Carregar e Unificar</button>
       <button class="btn" id="btnClear">Limpar</button>
 
-      <label style="min-width:180px;">
-        Plataforma
+      <label>Plataforma
         <select id="platformFilter"><option value="">Todas</option></select>
       </label>
-      <label style="min-width:180px;">
-        Keyword
+      <label>Keyword
         <select id="keywordFilter"><option value="">Todas</option></select>
       </label>
-      <label style="min-width:180px;">
-        Source
+      <label>Source
         <select id="sourceFilter"><option value="">Todos</option></select>
       </label>
     </div>
   </header>
 
   <div class="wrap">
-    <div class="grid">
-      <div class="card col-3">
+
+    <div class="kpis">
+      <div class="card">
         <div class="kpi" id="kpiRows">0</div>
         <div class="muted">linhas (total)</div>
       </div>
-      <div class="card col-3">
+      <div class="card">
         <div class="kpi" id="kpiPlatforms">0</div>
         <div class="muted">plataformas</div>
       </div>
-      <div class="card col-3">
+      <div class="card">
         <div class="kpi" id="kpiAuthors">0</div>
         <div class="muted">autores únicos</div>
       </div>
-      <div class="card col-3">
+      <div class="card">
         <div class="kpi" id="kpiKeywords">0</div>
         <div class="muted">keywords únicas</div>
       </div>
+    </div>
 
-      <div class="card col-7">
-        <div class="muted" style="margin-bottom:8px;">Volume por dia (collectedAt)</div>
-        <canvas id="chart"></canvas>
+    <div class="card">
+      <div class="muted">Volume por dia (collectedAt)</div>
+      <canvas id="chart"></canvas>
+    </div>
+
+    <div class="card">
+      <div class="muted">Top 8 keywords</div>
+      <div id="topKeywords" class="list"></div>
+    </div>
+
+    <div class="card">
+      <div class="muted">Top 10 autores</div>
+      <div id="topAuthors" class="list"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div>
+          <div class="muted">Top 25 posts</div>
+          <div class="muted2" id="topInfo">Ordenado por Comments (desc)</div>
+        </div>
+        <div class="muted2">Clica no cabeçalho para ordenar ▲▼</div>
       </div>
 
-      <div class="card col-5">
-        <div class="muted" style="margin-bottom:8px;">Top 8 keywords</div>
-        <div id="topKeywords"></div>
-      </div>
-
-      <div class="card col-6">
-        <div class="muted" style="margin-bottom:8px;">Top 10 autores</div>
-        <div id="topAuthors"></div>
-      </div>
-
-      <div class="card col-6">
-        <div class="muted" style="margin-bottom:8px;">Top 25 posts (por comments)</div>
-        <table>
+      <div style="overflow:auto; margin-top:8px; border-radius: 12px;">
+        <table id="postsTable">
           <thead>
             <tr>
-              <th>Source</th>
-              <th>Plataforma</th>
-              <th>Título</th>
-              <th>Autor</th>
-              <th>Views</th>
-              <th>Likes</th>
-              <th>Comments</th>
+              <th class="small"><span class="thBtn" data-key="source" data-type="text">Source <span class="sortIcon" id="icon-source"></span></span></th>
+              <th class="small"><span class="thBtn" data-key="platform" data-type="text">Plataforma <span class="sortIcon" id="icon-platform"></span></span></th>
+              <th><span class="thBtn" data-key="title" data-type="text">Título <span class="sortIcon" id="icon-title"></span></span></th>
+              <th><span class="thBtn" data-key="author" data-type="text">Autor <span class="sortIcon" id="icon-author"></span></span></th>
+              <th class="small"><span class="thBtn" data-key="views" data-type="num">Views <span class="sortIcon" id="icon-views"></span></span></th>
+              <th class="small"><span class="thBtn" data-key="likes" data-type="num">Likes <span class="sortIcon" id="icon-likes"></span></span></th>
+              <th class="small"><span class="thBtn" data-key="comments" data-type="num">Comments <span class="sortIcon" id="icon-comments"></span></span></th>
+              <th><span class="thBtn" data-key="desc" data-type="text">Descrição <span class="sortIcon" id="icon-desc"></span></span></th>
             </tr>
           </thead>
           <tbody id="topPosts"></tbody>
         </table>
       </div>
     </div>
+
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
@@ -150,13 +232,15 @@
     const statusEl = document.getElementById('status');
     const countsEl = document.getElementById('counts');
     const ytWarningEl = document.getElementById('ytWarning');
-    const xlsxHintEl = document.getElementById('xlsxHint');
+    const topInfoEl = document.getElementById('topInfo');
 
     const platformFilter = document.getElementById('platformFilter');
     const keywordFilter = document.getElementById('keywordFilter');
     const sourceFilter = document.getElementById('sourceFilter');
 
     let rawRows = [];
+    let currentTopRows = []; // top 25 já filtrado
+    let sortState = { key: 'comments', dir: 'desc', type: 'num' };
 
     // Helpers
     function norm(s){ return (s ?? '').toString().trim(); }
@@ -172,13 +256,9 @@
         .replaceAll('"','&quot;')
         .replaceAll("'","&#039;");
     }
-
-    // Normaliza nomes de colunas (ex: "authorMeta/name" -> "authormetaname")
     function keyNorm(k){
       return (k ?? '').toString().toLowerCase().replace(/[^a-z0-9]/g,'');
     }
-
-    // Index row por chaves normalizadas
     function indexRow(r){
       const idx = {};
       for (const k in r){
@@ -191,8 +271,6 @@
       }
       return idx;
     }
-
-    // Pick por índice
     function pickIdx(idx, ...keys){
       for (const k of keys){
         const nk = keyNorm(k);
@@ -223,7 +301,6 @@
       return s;
     }
 
-    // TikTok fallback URL
     function buildTikTokUrlIfMissing(idx, currentUrl){
       if(currentUrl) return currentUrl;
       const id = pickIdx(idx, 'id','videoid','awemeid');
@@ -252,7 +329,6 @@
       res.push(cur);
       return res;
     }
-
     function csvToRows(csvText){
       const lines = csvText.split(/\r?\n/).filter(l=>l.trim().length>0);
       if(lines.length === 0) return [];
@@ -306,18 +382,12 @@
 
     function renderList(container, pairs, max=10){
       container.innerHTML = '';
-      const ul = document.createElement('div');
-      ul.style.display = 'grid';
-      ul.style.gap = '8px';
       pairs.slice(0,max).forEach(([name, count])=>{
         const row = document.createElement('div');
-        row.style.display='flex';
-        row.style.justifyContent='space-between';
-        row.style.gap='12px';
-        row.innerHTML = `<span>${escapeHtml(name)}</span><span class="pill">${count}</span>`;
-        ul.appendChild(row);
+        row.className = 'listRow';
+        row.innerHTML = `<span>${escapeHtml(name)}</span><span class="badge">${count}</span>`;
+        container.appendChild(row);
       });
-      container.appendChild(ul);
     }
 
     function drawChart(canvas, labels, values){
@@ -360,7 +430,6 @@
       return source;
     }
 
-    // Normalização por source (com campos reais: TT diggCount, IG ownerUsername, etc.)
     function normalizeRow(r, source){
       const idx = indexRow(r);
 
@@ -380,49 +449,38 @@
       );
 
       let urlRaw = pickIdx(idx,
-        // comuns
         'url','link','permalink','shareurl',
-        // TikTok / IG
         'webvideourl','videourl','posturl',
-        // YouTube variantes
         'watchurl','canonicalurl','shorturl','videolink','videopageurl'
       );
 
       let url = normalizeUrl(urlRaw, source);
-      if(source === 'TT'){
-        url = buildTikTokUrlIfMissing(idx, url);
-      }
+      if(source === 'TT') url = buildTikTokUrlIfMissing(idx, url);
 
       const views = pickIdx(idx,
-        // IG às vezes
         'videoviewcount','videoplaycount',
-        // TT
         'playcount',
-        // genérico
         'views','viewcount','plays','impressions'
       );
 
       const likes = pickIdx(idx,
-        // IG
         'likescount',
-        // TT (likes = diggs)
         'diggcount',
-        // genérico
         'likes','likecount','heartcount','hearts'
       );
 
       const comments = pickIdx(idx,
-        // IG
         'commentscount',
-        // TT
         'commentcount',
-        // genérico
         'comments','comment'
       );
 
       const publishedAt = pickIdx(idx, 'publishedat','date','createdat','createtime','timestamp','time');
       const keyword = pickIdx(idx, 'keyword','query','search','searchquery') || '';
       const collectedAt = pickIdx(idx, 'collectedat','scrapedat','pulledat') || new Date().toISOString();
+
+      // descrição: tenta primeiro "text/caption/description" (já está no title pick, mas aqui queremos o corpo)
+      const desc = pickIdx(idx, 'text','caption','description','content','posttext');
 
       const hasError = !!pickIdx(idx, 'error','errormessage','status') && String(pickIdx(idx,'error','status')).toLowerCase().includes('not');
 
@@ -436,7 +494,7 @@
         views,
         likes,
         comments,
-        text: norm(pickIdx(idx, 'text','caption','description','content','posttext')),
+        desc: norm(desc),
         keyword: norm(keyword),
         collectedAt,
         _hasAboutChannelInfo: !!pickIdx(idx, 'aboutchannelinfochannelname','aboutchannelinfochannelurl','channeltotalvideos'),
@@ -454,7 +512,6 @@
       return about > rows.length * 0.6 && videoUrl === 0;
     }
 
-    // Parse file
     function parseFile(file, source){
       return new Promise((resolve, reject)=>{
         const ext = file.name.toLowerCase().split('.').pop();
@@ -466,9 +523,7 @@
             if(ext === 'csv'){
               rows = csvToRows(e.target.result);
             } else {
-              if(typeof XLSX === 'undefined'){
-                throw new Error('XLSX não carregou. Usa CSV nos 3 para estabilidade.');
-              }
+              if(typeof XLSX === 'undefined') throw new Error('XLSX não carregou. Usa CSV.');
               const data = new Uint8Array(e.target.result);
               const wb = XLSX.read(data, {type:'array'});
               const sheetName = wb.SheetNames[0];
@@ -478,9 +533,7 @@
 
             const out = rows
               .map(r => normalizeRow(r, source))
-              // remove linhas vazias
-              .filter(x => x.url || x.title || x.author)
-              // remove linhas com erro (ex: IG not_found) para não estragar métricas
+              .filter(x => x.url || x.title || x.author || x.desc)
               .filter(x => !x._hasError);
 
             resolve(out);
@@ -490,7 +543,6 @@
         };
 
         reader.onerror = reject;
-
         if(ext === 'csv') reader.readAsText(file);
         else reader.readAsArrayBuffer(file);
       });
@@ -531,10 +583,73 @@
 
       if(isYouTubeChannelOnly(ytRows)){
         ytWarningEl.style.display = '';
-        ytWarningEl.textContent = 'O CSV do YouTube parece ser “channel info” (aboutChannelInfo), não lista de vídeos. No actor streamers/youtube-scraper usa startUrls a terminar em /videos.';
+        ytWarningEl.textContent = 'O CSV do YouTube parece ser “channel info” (aboutChannelInfo), não lista de vídeos. No streamers/youtube-scraper usa startUrls a terminar em /videos.';
       } else {
         ytWarningEl.style.display = 'none';
         ytWarningEl.textContent = '';
+      }
+    }
+
+    // Sorting
+    function clearIcons(){
+      const ids = ['source','platform','title','author','views','likes','comments','desc'];
+      ids.forEach(id=>{
+        const el = document.getElementById('icon-' + id);
+        if(el) el.textContent = '';
+      });
+    }
+
+    function setIcon(key, dir){
+      const el = document.getElementById('icon-' + key);
+      if(!el) return;
+      el.textContent = (dir === 'asc') ? '▲' : '▼';
+    }
+
+    function sortRows(rows, key, dir, type){
+      const mult = (dir === 'asc') ? 1 : -1;
+      const getVal = (r)=>{
+        if(key === 'views') return toNum(r.views);
+        if(key === 'likes') return toNum(r.likes);
+        if(key === 'comments') return toNum(r.comments);
+        return norm(r[key] ?? '');
+      };
+
+      return [...rows].sort((a,b)=>{
+        const A = getVal(a);
+        const B = getVal(b);
+
+        if(type === 'num'){
+          return (A - B) * mult;
+        }
+        // text
+        return A.localeCompare(B, undefined, { sensitivity:'base' }) * mult;
+      });
+    }
+
+    function renderTopPosts(rows){
+      const tbody = document.getElementById('topPosts');
+      tbody.innerHTML = '';
+
+      for(const r of rows){
+        const safeUrl = r.url || '';
+        const title = norm(r.title) || '(sem título)';
+        const author = norm(r.author) || '(sem autor)';
+        const desc = norm(r.desc) || '';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="small">${escapeHtml(norm(r.source))}</td>
+          <td class="small">${escapeHtml(norm(r.platform))}</td>
+          <td class="titleCell">${safeUrl ? `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noreferrer">${escapeHtml(title)}</a>` : escapeHtml(title)}</td>
+          <td>${escapeHtml(author)}</td>
+          <td class="small">${toNum(r.views).toLocaleString('pt-PT')}</td>
+          <td class="small">${toNum(r.likes).toLocaleString('pt-PT')}</td>
+          <td class="small">${toNum(r.comments).toLocaleString('pt-PT')}</td>
+          <td class="descCell" title="${escapeHtml(desc)}">
+            <div class="truncate">${escapeHtml(desc || '—')}</div>
+          </td>
+        `;
+        tbody.appendChild(tr);
       }
     }
 
@@ -554,34 +669,45 @@
       renderList(document.getElementById('topKeywords'), countBy(rows, r=>norm(r.keyword)), 8);
       renderList(document.getElementById('topAuthors'), countBy(rows, r=>norm(r.author)), 10);
 
-      const topPosts = [...rows]
+      // Base: Top 25 por comments desc
+      currentTopRows = [...rows]
         .sort((a,b)=> (toNum(b.comments)-toNum(a.comments)) || (toNum(b.views)-toNum(a.views)))
         .slice(0,25);
 
-      const tbody = document.getElementById('topPosts');
-      tbody.innerHTML = '';
-      for(const r of topPosts){
-        const safeUrl = r.url || '';
-        const title = norm(r.title) || '(sem título)';
-        const author = norm(r.author) || '(sem autor)';
+      // Aplica a ordenação atual (por defeito: comments desc)
+      const sorted = sortRows(currentTopRows, sortState.key, sortState.dir, sortState.type);
+      clearIcons();
+      setIcon(sortState.key, sortState.dir);
 
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${escapeHtml(norm(r.source))}</td>
-          <td>${escapeHtml(norm(r.platform))}</td>
-          <td>${safeUrl ? `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noreferrer">${escapeHtml(title.slice(0,90))}</a>` : escapeHtml(title.slice(0,90))}</td>
-          <td>${escapeHtml(author)}</td>
-          <td>${toNum(r.views).toLocaleString('pt-PT')}</td>
-          <td>${toNum(r.likes).toLocaleString('pt-PT')}</td>
-          <td>${toNum(r.comments).toLocaleString('pt-PT')}</td>
-        `;
-        tbody.appendChild(tr);
-      }
+      topInfoEl.textContent = `Ordenado por ${sortState.key} (${sortState.dir})`;
+      renderTopPosts(sorted);
 
       const byDay = countBy(rows, r=>dayKey(r.collectedAt));
       byDay.sort((a,b)=> a[0].localeCompare(b[0]));
       drawChart(document.getElementById('chart'), byDay.map(x=>x[0]), byDay.map(x=>x[1]));
     }
+
+    // Click handlers (headers)
+    document.querySelectorAll('.thBtn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const key = btn.getAttribute('data-key');
+        const type = btn.getAttribute('data-type');
+
+        if(sortState.key === key){
+          sortState.dir = (sortState.dir === 'asc') ? 'desc' : 'asc';
+        } else {
+          sortState.key = key;
+          sortState.dir = (type === 'num') ? 'desc' : 'asc';
+          sortState.type = type;
+        }
+
+        const sorted = sortRows(currentTopRows, sortState.key, sortState.dir, sortState.type);
+        clearIcons();
+        setIcon(sortState.key, sortState.dir);
+        topInfoEl.textContent = `Ordenado por ${sortState.key} (${sortState.dir})`;
+        renderTopPosts(sorted);
+      });
+    });
 
     // Eventos
     btnLoad.addEventListener('click', async ()=>{
@@ -593,15 +719,6 @@
 
       if(files.length === 0){
         alert('Carrega pelo menos 1 ficheiro (YT/TT/IG).');
-        return;
-      }
-
-      const hasExcel = files.some(x => {
-        const ext = x.file.name.toLowerCase().split('.').pop();
-        return ext === 'xlsx' || ext === 'xls';
-      });
-      if(hasExcel && typeof XLSX === 'undefined'){
-        alert('Estás a carregar Excel (.xlsx/.xls), mas o leitor XLSX não carregou. Usa CSV nos 3 para estabilidade.');
         return;
       }
 
@@ -628,6 +745,7 @@
 
     btnClear.addEventListener('click', ()=>{
       rawRows = [];
+      currentTopRows = [];
       fileYT.value = '';
       fileTT.value = '';
       fileIG.value = '';
@@ -635,6 +753,10 @@
       platformFilter.value = '';
       keywordFilter.value = '';
       sourceFilter.value = '';
+
+      sortState = { key: 'comments', dir: 'desc', type: 'num' };
+      clearIcons();
+      setIcon('comments', 'desc');
 
       refreshFilters();
       updateCountsAndWarnings();
@@ -650,11 +772,8 @@
     sourceFilter.addEventListener('change', update);
 
     (function init(){
-      if(typeof XLSX === 'undefined'){
-        xlsxHintEl.innerHTML = '<span class="danger">Dica:</span> se estiveres offline, usa CSV.';
-      } else {
-        xlsxHintEl.textContent = '';
-      }
+      clearIcons();
+      setIcon('comments', 'desc');
       refreshFilters();
       updateCountsAndWarnings();
       update();
