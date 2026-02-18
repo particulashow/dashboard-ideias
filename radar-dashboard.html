@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Radar Dashboard (Multi-upload)</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 0; background:#0b0f19; color:#e8eefc; }
+    header { padding: 18px 16px; border-bottom: 1px solid rgba(255,255,255,.08); display:flex; gap:12px; align-items:center; flex-wrap:wrap;}
+    h1 { font-size: 16px; margin: 0; letter-spacing:.2px; }
+    .pill { padding: 6px 10px; border:1px solid rgba(255,255,255,.12); border-radius: 999px; font-size: 12px; color:#bcd0ff;}
+    .wrap { padding: 16px; max-width: 1200px; margin: 0 auto; }
+    .grid { display:grid; gap:12px; grid-template-columns: repeat(12, 1fr); }
+    .card { background: rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius: 14px; padding: 12px; }
+    .kpi { font-size: 22px; font-weight: 700; }
+    .muted { color:#a9b7d6; font-size: 12px; }
+    label { font-size: 12px; color:#a9b7d6; display:flex; flex-direction:column; gap:6px;}
+    select, input[type="file"] { background: rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); color:#e8eefc; border-radius: 10px; padding: 8px; }
+    table { width:100%; border-collapse: collapse; font-size: 12px; }
+    th, td { border-bottom:1px solid rgba(255,255,255,.08); padding: 8px 6px; text-align:left; vertical-align: top;}
+    th { color:#bcd0ff; font-weight: 600; }
+    a { color:#7fb0ff; text-decoration:none; }
+    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+    .btn {
+      padding: 8px 10px; border-radius: 10px; border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06); color:#e8eefc; cursor:pointer;
+    }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    .col-3 { grid-column: span 3; }
+    .col-4 { grid-column: span 4; }
+    .col-5 { grid-column: span 5; }
+    .col-6 { grid-column: span 6; }
+    .col-7 { grid-column: span 7; }
+    .col-8 { grid-column: span 8; }
+    .col-12 { grid-column: span 12; }
+    canvas { width:100%; height: 220px; }
+    @media (max-width: 900px){
+      .col-3,.col-4,.col-5,.col-6,.col-7,.col-8 { grid-column: span 12; }
+      header { align-items:flex-start; }
+      label { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <h1>Radar Dashboard</h1>
+      <span class="pill">3 ficheiros → 1 visão</span>
+      <span class="pill" id="status">à espera de ficheiros</span>
+    </div>
+
+    <div class="row" style="width:100%;">
+      <label>
+        YouTube (CSV/XLSX)
+        <input id="fileYT" type="file" accept=".xlsx,.xls,.csv" />
+      </label>
+      <label>
+        TikTok (CSV/XLSX)
+        <input id="fileTT" type="file" accept=".xlsx,.xls,.csv" />
+      </label>
+      <label>
+        Instagram (CSV/XLSX)
+        <input id="fileIG" type="file" accept=".xlsx,.xls,.csv" />
+      </label>
+
+      <button class="btn" id="btnLoad">Carregar e Unificar</button>
+      <button class="btn" id="btnClear">Limpar</button>
+
+      <label style="min-width:180px;">
+        Plataforma
+        <select id="platformFilter"><option value="">Todas</option></select>
+      </label>
+      <label style="min-width:180px;">
+        Keyword
+        <select id="keywordFilter"><option value="">Todas</option></select>
+      </label>
+      <label style="min-width:180px;">
+        Source
+        <select id="sourceFilter"><option value="">Todos</option></select>
+      </label>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="grid">
+      <div class="card col-3">
+        <div class="kpi" id="kpiRows">0</div>
+        <div class="muted">linhas (total)</div>
+      </div>
+      <div class="card col-3">
+        <div class="kpi" id="kpiPlatforms">0</div>
+        <div class="muted">plataformas</div>
+      </div>
+      <div class="card col-3">
+        <div class="kpi" id="kpiAuthors">0</div>
+        <div class="muted">autores únicos</div>
+      </div>
+      <div class="card col-3">
+        <div class="kpi" id="kpiKeywords">0</div>
+        <div class="muted">keywords únicas</div>
+      </div>
+
+      <div class="card col-7">
+        <div class="muted" style="margin-bottom:8px;">Volume por dia (collectedAt)</div>
+        <canvas id="chart"></canvas>
+      </div>
+
+      <div class="card col-5">
+        <div class="muted" style="margin-bottom:8px;">Top 8 keywords</div>
+        <div id="topKeywords"></div>
+      </div>
+
+      <div class="card col-6">
+        <div class="muted" style="margin-bottom:8px;">Top 10 autores</div>
+        <div id="topAuthors"></div>
+      </div>
+
+      <div class="card col-6">
+        <div class="muted" style="margin-bottom:8px;">Top 10 posts (por comments)</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Source</th>
+              <th>Plataforma</th>
+              <th>Título</th>
+              <th>Autor</th>
+              <th>Views</th>
+              <th>Likes</th>
+              <th>Comments</th>
+            </tr>
+          </thead>
+          <tbody id="topPosts"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- SheetJS (ler Excel) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
+
+  <script>
+    const fileYT = document.getElementById('fileYT');
+    const fileTT = document.getElementById('fileTT');
+    const fileIG = document.getElementById('fileIG');
+    const btnLoad = document.getElementById('btnLoad');
+    const btnClear = document.getElementById('btnClear');
+    const statusEl = document.getElementById('status');
+
+    const platformFilter = document.getElementById('platformFilter');
+    const keywordFilter = document.getElementById('keywordFilter');
+    const sourceFilter = document.getElementById('sourceFilter');
+
+    let rawRows = [];
+
+    function norm(s){ return (s ?? '').toString().trim(); }
+    function toNum(v){
+      const n = Number((v ?? '').toString().replace(/[^\d.-]/g,''));
+      return Number.isFinite(n) ? n : 0;
+    }
+    function escapeHtml(str){
+      return (str ?? '').toString()
+        .replaceAll('&','&amp;')
+        .replaceAll('<','&lt;')
+        .replaceAll('>','&gt;')
+        .replaceAll('"','&quot;')
+        .replaceAll("'","&#039;");
+    }
+    function splitCsvLine(line){
+      const res = [];
+      let cur = '';
+      let inQ = false;
+      for(let i=0;i<line.length;i++){
+        const ch = line[i];
+        if(ch === '"'){
+          if(inQ && line[i+1] === '"'){ cur += '"'; i++; }
+          else inQ = !inQ;
+        } else if(ch === ',' && !inQ){
+          res.push(cur); cur='';
+        } else {
+          cur += ch;
+        }
+      }
+      res.push(cur);
+      return res;
+    }
+    function csvToRows(csvText){
+      const lines = csvText.split(/\r?\n/).filter(l=>l.trim().length>0);
+      if(lines.length === 0) return [];
+      const headers = splitCsvLine(lines[0]).map(h=>h.trim());
+      const out = [];
+      for(let i=1;i<lines.length;i++){
+        const cols = splitCsvLine(lines[i]);
+        const obj = {};
+        headers.forEach((h, idx)=> obj[h] = cols[idx] ?? '');
+        out.push(obj);
+      }
+      return out;
+    }
+    function dayKey(v){
+      const s = norm(v);
+      if(!s) return '';
+      const d = new Date(s);
+      if(!isNaN(d.getTime())) return d.toISOString().slice(0,10);
+      const m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/);
+      if(m){
+        const dd = m[1].padStart(2,'0');
+        const mm = m[2].padStart(2,'0');
+        const yy = m[3].length===2 ? '20'+m[3] : m[3];
+        return `${yy}-${mm}-${dd}`;
+      }
+      return '';
+    }
+    function countBy(arr, keyFn){
+      const map = new Map();
+      for(const item of arr){
+        const k = keyFn(item);
+        if(!k) continue;
+        map.set(k, (map.get(k) || 0) + 1);
+      }
+      return [...map.entries()].sort((a,b)=>b[1]-a[1]);
+    }
+    function setSelectOptions(selectEl, values){
+      const first = selectEl.options[0];
+      selectEl.innerHTML = '';
+      selectEl.appendChild(first);
+      for (const v of values){
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        selectEl.appendChild(opt);
+      }
+    }
+    function renderList(container, pairs, max=10){
+      container.innerHTML = '';
+      const ul = document.createElement('div');
+      ul.style.display = 'grid';
+      ul.style.gap = '8px';
+      pairs.slice(0,max).forEach(([name, count])=>{
+        const row = document.createElement('div');
+        row.style.display='flex';
+        row.style.justifyContent='space-between';
+        row.style.gap='12px';
+        row.innerHTML = `<span>${escapeHtml(name)}</span><span class="pill">${count}</span>`;
+        ul.appendChild(row);
+      });
+      container.appendChild(ul);
+    }
+    function drawChart(canvas, labels, values){
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width = canvas.clientWidth * devicePixelRatio;
+      const h = canvas.height = 220 * devicePixelRatio;
+      ctx.clearRect(0,0,w,h);
+
+      const pad = 18 * devicePixelRatio;
+      const maxV = Math.max(1, ...values);
+      const n = labels.length;
+
+      ctx.globalAlpha = 0.35;
+      ctx.strokeStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(pad, h - pad);
+      ctx.lineTo(w - pad, h - pad);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      if(n === 0) return;
+
+      const barW = (w - 2*pad) / n;
+      for(let i=0;i<n;i++){
+        const v = values[i];
+        const bh = (h - 2*pad) * (v / maxV);
+        const x = pad + i*barW + barW*0.1;
+        const y = (h - pad) - bh;
+        const bw = barW*0.8;
+
+        ctx.fillStyle = 'rgba(127,176,255,0.9)';
+        ctx.fillRect(x,y,bw,bh);
+      }
+    }
+
+    // Mapeia diferentes nomes de colunas para o nosso schema
+    function normalizeRow(r, sourceLabel){
+      return {
+        source:     sourceLabel, // YT/TT/IG
+        platform:   r.platform ?? r.Platform ?? r.PLATFORM ?? sourceLabel,
+        author:     r.author ?? r.Author ?? r.AUTHOR ?? r.username ?? r.user ?? r.channel ?? '',
+        title:      r.title ?? r.Title ?? r.TITLE ?? r.caption ?? r.text ?? r.description ?? '',
+        url:        r.url ?? r.URL ?? r.link ?? r.Link ?? r.videoUrl ?? r.postUrl ?? '',
+        publishedAt:r.publishedAt ?? r.published_at ?? r.PublishedAt ?? r.createTime ?? r.timestamp ?? '',
+        views:      r.views ?? r.Views ?? r.viewCount ?? r.plays ?? '',
+        likes:      r.likes ?? r.Likes ?? r.likeCount ?? r.hearts ?? '',
+        comments:   r.comments ?? r.Comments ?? r.commentCount ?? '',
+        text:       r.text ?? r.Text ?? r.caption ?? r.description ?? '',
+        keyword:    r.keyword ?? r.Keyword ?? r.query ?? r.search ?? '',
+        collectedAt:r.collectedAt ?? r.collected_at ?? r.CollectedAt ?? new Date().toISOString()
+      };
+    }
+
+    function parseFile(file, sourceLabel){
+      return new Promise((resolve, reject)=>{
+        const ext = file.name.toLowerCase().split('.').pop();
+        const reader = new FileReader();
+
+        reader.onload = (e) => {
+          try{
+            let rows = [];
+            if(ext === 'csv'){
+              rows = csvToRows(e.target.result);
+            } else {
+              const data = new Uint8Array(e.target.result);
+              const wb = XLSX.read(data, {type:'array'});
+              const sheetName = wb.SheetNames[0];
+              const ws = wb.Sheets[sheetName];
+              rows = XLSX.utils.sheet_to_json(ws, {defval: ''});
+            }
+            resolve(rows.map(r => normalizeRow(r, sourceLabel)));
+          } catch(err){ reject(err); }
+        };
+
+        reader.onerror = reject;
+
+        if(ext === 'csv') reader.readAsText(file);
+        else reader.readAsArrayBuffer(file);
+      });
+    }
+
+    function applyFilters(){
+      const p = platformFilter.value;
+      const k = keywordFilter.value;
+      const s = sourceFilter.value;
+
+      return rawRows.filter(r => {
+        const okP = !p || norm(r.platform) === p;
+        const okK = !k || norm(r.keyword) === k;
+        const okS = !s || norm(r.source) === s;
+        return okP && okK && okS;
+      });
+    }
+
+    function update(){
+      const rows = applyFilters();
+
+      document.getElementById('kpiRows').textContent = rows.length.toLocaleString('pt-PT');
+
+      const platforms = new Set(rows.map(r=>norm(r.platform)).filter(Boolean));
+      const authors   = new Set(rows.map(r=>norm(r.author)).filter(Boolean));
+      const keywords  = new Set(rows.map(r=>norm(r.keyword)).filter(Boolean));
+
+      document.getElementById('kpiPlatforms').textContent = platforms.size.toLocaleString('pt-PT');
+      document.getElementById('kpiAuthors').textContent = authors.size.toLocaleString('pt-PT');
+      document.getElementById('kpiKeywords').textContent = keywords.size.toLocaleString('pt-PT');
+
+      renderList(document.getElementById('topKeywords'), countBy(rows, r=>norm(r.keyword)), 8);
+      renderList(document.getElementById('topAuthors'), countBy(rows, r=>norm(r.author)), 10);
+
+      const topPosts = [...rows]
+        .sort((a,b)=> (toNum(b.comments)-toNum(a.comments)) || (toNum(b.views)-toNum(a.views)))
+        .slice(0,10);
+
+      const tbody = document.getElementById('topPosts');
+      tbody.innerHTML = '';
+      for(const r of topPosts){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${escapeHtml(norm(r.source))}</td>
+          <td>${escapeHtml(norm(r.platform))}</td>
+          <td><a href="${escapeHtml(norm(r.url))}" target="_blank" rel="noreferrer">${escapeHtml(norm(r.title).slice(0,90))}</a></td>
+          <td>${escapeHtml(norm(r.author))}</td>
+          <td>${toNum(r.views).toLocaleString('pt-PT')}</td>
+          <td>${toNum(r.likes).toLocaleString('pt-PT')}</td>
+          <td>${toNum(r.comments).toLocaleString('pt-PT')}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+
+      const byDay = countBy(rows, r=>dayKey(r.collectedAt));
+      byDay.sort((a,b)=> a[0].localeCompare(b[0]));
+      drawChart(document.getElementById('chart'), byDay.map(x=>x[0]), byDay.map(x=>x[1]));
+    }
+
+    function refreshFilters(){
+      const allPlatforms = [...new Set(rawRows.map(r=>norm(r.platform)).filter(Boolean))].sort();
+      const allKeywords  = [...new Set(rawRows.map(r=>norm(r.keyword)).filter(Boolean))].sort();
+      const allSources   = [...new Set(rawRows.map(r=>norm(r.source)).filter(Boolean))].sort();
+      setSelectOptions(platformFilter, allPlatforms);
+      setSelectOptions(keywordFilter, allKeywords);
+      setSelectOptions(sourceFilter, allSources);
+    }
+
+    btnLoad.addEventListener('click', async ()=>{
+      const files = [
+        { file: fileYT.files?.[0], label: 'YT' },
+        { file: fileTT.files?.[0], label: 'TT' },
+        { file: fileIG.files?.[0], label: 'IG' }
+      ].filter(x => x.file);
+
+      if(files.length === 0){
+        alert('Carrega pelo menos 1 ficheiro (YT/TT/IG).');
+        return;
+      }
+
+      statusEl.textContent = 'a carregar...';
+      btnLoad.disabled = true;
+
+      try{
+        const parsed = await Promise.all(files.map(x => parseFile(x.file, x.label)));
+        rawRows = parsed.flat();
+
+        refreshFilters();
+        update();
+        statusEl.textContent = `ok (${rawRows.length.toLocaleString('pt-PT')} linhas)`;
+      } catch(err){
+        console.error(err);
+        alert('Erro a ler ficheiros. Se quiseres, envia-me um exemplo de cada export e eu ajusto o mapeamento das colunas.');
+        statusEl.textContent = 'erro';
+      } finally {
+        btnLoad.disabled = false;
+      }
+    });
+
+    btnClear.addEventListener('click', ()=>{
+      rawRows = [];
+      fileYT.value = '';
+      fileTT.value = '';
+      fileIG.value = '';
+      platformFilter.value = '';
+      keywordFilter.value = '';
+      sourceFilter.value = '';
+      refreshFilters();
+      update();
+      statusEl.textContent = 'limpo';
+    });
+
+    platformFilter.addEventListener('change', update);
+    keywordFilter.addEventListener('change', update);
+    sourceFilter.addEventListener('change', update);
+
+    // init
+    refreshFilters();
+    update();
+  </script>
+</body>
+</html>
